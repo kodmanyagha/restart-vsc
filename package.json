@@ -1,0 +1,85 @@
+{
+  "name": "restart-vsc",
+  "displayName": "Restart VS Code",
+  "description": "Reload the window, reload every window, restart the extension host, or restart VS Code completely (every process ends, then it starts again) — on Linux, macOS and Windows.",
+  "version": "0.1.0",
+  "publisher": "emirbugra",
+  "license": "MIT",
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "keywords": [
+    "restart",
+    "reload",
+    "reload window",
+    "restart vscode",
+    "extension host"
+  ],
+  "extensionKind": [
+    "ui"
+  ],
+  "activationEvents": [
+    "onStartupFinished"
+  ],
+  "main": "./dist/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "restartVsc.reloadWindow",
+        "title": "Reload Window",
+        "category": "Restart"
+      },
+      {
+        "command": "restartVsc.reloadAllWindows",
+        "title": "Reload All Windows",
+        "category": "Restart"
+      },
+      {
+        "command": "restartVsc.restartExtensionHost",
+        "title": "Restart Extension Host",
+        "category": "Restart"
+      },
+      {
+        "command": "restartVsc.restartVscode",
+        "title": "Restart VS Code",
+        "category": "Restart"
+      },
+      {
+        "command": "restartVsc.menu",
+        "title": "Show Restart Menu",
+        "category": "Restart"
+      }
+    ],
+    "configuration": {
+      "title": "Restart VS Code",
+      "properties": {
+        "restartVsc.statusBar": {
+          "type": "boolean",
+          "default": true,
+          "markdownDescription": "Show a restart button in the status bar. It opens a menu with the four restart commands."
+        },
+        "restartVsc.confirmRestart": {
+          "type": "boolean",
+          "default": false,
+          "markdownDescription": "Ask before **Restart VS Code**. A restart ends every process VS Code started, including the ones running in its terminals."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "compile": "tsc -p ./ --noEmit && esbuild src/extension.ts --bundle --outfile=dist/extension.js --external:vscode --format=cjs --platform=node --sourcemap",
+    "test": "node test/helper-sim.js",
+    "package": "npm run compile && vsce package",
+    "vscode:prepublish": "esbuild src/extension.ts --bundle --outfile=dist/extension.js --external:vscode --format=cjs --platform=node --minify"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "@types/vscode": "^1.85.0",
+    "@vscode/vsce": "^4.1.0",
+    "esbuild": "^0.25.0",
+    "typescript": "^5.4.0"
+  }
+}
