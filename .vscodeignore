@@ -6,4 +6,4 @@ out/**
 tsconfig.json
 **/*.map
 *.vsix
-media/icon.svg
+images/icon.svg

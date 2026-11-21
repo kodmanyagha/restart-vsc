@@ -1,0 +1,139 @@
+# Builds and tests the extension on Linux, macOS and Windows, packages one .vsix and publishes it to
+# the VS Code Marketplace and Open VSX.
+#
+# The extension is plain JavaScript (no native code), so one .vsix runs on every platform. The
+# three-system build exists because the restart helper uses different system tools on each
+# (/proc, ps, PowerShell + taskkill); the test starts a pretend VS Code and restarts it.
+#
+# - Push a tag `v<version>` (equal to "version" in package.json) to build and publish.
+# - Pull requests and pushes to main only build and test.
+# - Run it by hand (Actions → Release → Run workflow); tick "publish" to publish too.
+#
+# VS Code Marketplace: Trusted Publishing (OIDC) when the publisher has a policy for this repository
+# and release.yml (marketplace.visualstudio.com/manage → publisher → Trusted Publishing), else the
+# VSCE_PAT secret (a Personal Access Token with the Marketplace "Manage" scope).
+# Open VSX: OVSX_PAT secret (optional; skipped when not set).
+# The GitHub release (tag runs) is created first, so the .vsix is there even when a marketplace
+# step fails.
+
+name: Release
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+  workflow_dispatch:
+    inputs:
+      publish:
+        description: Publish to the Marketplace / Open VSX
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build and test (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - name: Compile
+        run: npm run compile
+
+      - name: Restart helper test
+        run: npm test
+
+      - name: Package
+        run: npx vsce package -o restart-vsc.vsix
+
+      - name: Show what is in the package
+        shell: bash
+        run: |
+          npx vsce ls
+          # the helper has to be in it, as plain files
+          npx vsce ls | grep -q "helper/restart-helper.js"
+
+      # one package is enough: the code is the same everywhere
+      - uses: actions/upload-artifact@v7
+        if: matrix.os == 'ubuntu-latest'
+        with:
+          name: vsix
+          path: restart-vsc.vsix
+          if-no-files-found: error
+
+  check-version:
+    name: Check tag against package.json
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - run: |
+          version=$(node -p "require('./package.json').version")
+          if [ "${GITHUB_REF_NAME}" != "v${version}" ]; then
+            echo "::error::tag ${GITHUB_REF_NAME} does not match package.json version ${version}"
+            exit 1
+          fi
+
+  publish:
+    name: Publish
+    needs: [build, check-version]
+    if: ${{ !failure() && !cancelled() && ((github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')) || inputs.publish) }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # GitHub release
+      id-token: write # Marketplace Trusted Publishing (OIDC)
+    env:
+      VSCE_PAT: ${{ secrets.VSCE_PAT }}
+      OVSX_PAT: ${{ secrets.OVSX_PAT }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - uses: actions/download-artifact@v8
+        with:
+          name: vsix
+          path: dist-vsix
+
+      - name: GitHub release
+        if: github.event_name == 'push'
+        uses: softprops/action-gh-release@v3
+        with:
+          files: dist-vsix/*.vsix
+          generate_release_notes: true
+
+      - name: Open VSX
+        if: env.OVSX_PAT != ''
+        run: |
+          publisher=$(node -p "require('./package.json').publisher")
+          # the namespace has to exist once; fails harmlessly when it already does
+          npx --yes ovsx create-namespace "$publisher" --pat "$OVSX_PAT" || true
+          npx --yes ovsx publish dist-vsix/restart-vsc.vsix --pat "$OVSX_PAT"
+
+      - name: VS Code Marketplace
+        run: |
+          if [ -n "$VSCE_PAT" ]; then
+            npx vsce publish --packagePath dist-vsix/restart-vsc.vsix
+          else
+            # Trusted Publishing: GitHub's OIDC token is exchanged for a short-lived Marketplace token
+            npx vsce publish --oidc --packagePath dist-vsix/restart-vsc.vsix
+          fi
