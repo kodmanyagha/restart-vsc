@@ -72,6 +72,12 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   for (const n of ['main.pid', 'ext.pid', 'orphan.pid']) {
     if (alive(Number(read(n)))) fail(n + ' is still running');
   }
-  fs.rmSync(dir, { recursive: true, force: true });
+  // on Windows the restarted copy of node may still be exiting and keeps code.exe locked for a moment;
+  // a leftover temp folder is not a failure
+  try {
+    fs.rmSync(dir, { recursive: true, force: true, maxRetries: 20, retryDelay: 250 });
+  } catch (e) {
+    console.warn('could not remove ' + dir + ': ' + e.code);
+  }
   console.log('ok: main, extension host and an orphan that ignores SIGTERM ended; started again with', got.join(' '));
 })();
