@@ -179,7 +179,8 @@ function commandLine(pid, exe) {
       return splitCommandLine(out);
     }
     const out = execFileSync('ps', ['-p', String(pid), '-o', 'command='], { encoding: 'utf8' }).trim();
-    return splitCommandLine(out.startsWith(exe) ? out.slice(exe.length) : out.replace(/^\S+/, '')).slice(0);
+    // the caller drops the first item (the program), like on Linux and Windows
+    return [exe, ...splitCommandLine(out.startsWith(exe) ? out.slice(exe.length) : out.replace(/^\S+/, ''))];
   } catch (e) {
     log(`command line of ${pid}: ${e.message}`);
     return [];
